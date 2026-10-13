@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.117.3",
     "next": "16.4.0",
     "react": "19.3.0",
     "react-dom": "19.3.0"
@@ -22,5 +23,8 @@
     "eslint-config-next": "16.4.0",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "allowScripts": {
+    "unrs-resolver@1.12.2": true
   }
 }

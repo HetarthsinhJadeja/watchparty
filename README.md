@@ -1,36 +1,23 @@
 # WatchParty 🎬
 
-A real-time synchronized watch party web application that lets people watch videos together remotely.
+WatchParty is an early-stage web app for bringing friends together for a movie night, wherever they are.
 
-## Project Overview
+## Current status
 
-WatchParty aims to let users join a shared room and synchronize video playback across multiple browsers.
+The landing page includes a responsive introduction, a temporary room-code generator, and a join-code form with clear feedback. Room codes only exist in the current page session. Joining a code does not look up or connect to a real room yet.
 
-## Planned Features
+The project includes the Supabase JavaScript client and a client setup in `lib/supabase.ts`, but the landing page does not use Supabase. Persistent rooms, video playback, realtime synchronisation, chat, and authentication are not implemented yet.
 
-- [ ] Create and join watch rooms
-- [ ] Synchronized play, pause, and seeking
-- [ ] Room participant list
-- [ ] Shareable room codes or links
-- [ ] Real-time chat and emoji reactions
-- [ ] Late-join playback synchronization
-- [ ] Movie discovery and shared playlists
+## Tech stack
 
-## Tech Stack
-
-- Next.js (App Router)
-- React
-- TypeScript
+- Next.js App Router
+- React and TypeScript
 - Tailwind CSS
-- Supabase (planned)
+- Supabase JavaScript client (installed; not yet used by the app)
 
-## Getting Started
+## Run locally
 
-### Prerequisites
-
-Install Node.js and npm.
-
-### Run locally
+Install Node.js and npm, then run:
 
 ```bash
 npm install
@@ -39,10 +26,6 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-## Project Status
-
-Currently in development. Features will be marked complete after implementation and testing.
-
 ## Security
 
-Never commit `.env.local`, API credentials, or Supabase secret keys to Git.
+Keep `.env.local`, API credentials, and Supabase secret keys out of Git. Never use a Supabase service-role or secret key in browser code.
