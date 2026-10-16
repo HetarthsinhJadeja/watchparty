@@ -6,9 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --experimental-strip-types --test tests/playback-metrics.test.mts tests/room-media.test.mts tests/movie-catalogue.test.mts tests/playlist-state.test.mts tests/auth-redirect.test.mts",
+    "test:playback": "node --experimental-strip-types --test tests/playback-metrics.test.mts"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.117.3",
     "next": "16.4.0",
     "react": "19.3.0",

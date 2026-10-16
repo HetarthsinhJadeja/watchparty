@@ -1,5 +1,5 @@
 
-import { createClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabasePublishableKey =
@@ -9,7 +9,7 @@ if (!supabaseUrl || !supabasePublishableKey) {
   throw new Error("Missing Supabase environment variables.");
 }
 
-export const supabase = createClient(
+export const supabase = createBrowserClient(
   supabaseUrl,
   supabasePublishableKey
 );
