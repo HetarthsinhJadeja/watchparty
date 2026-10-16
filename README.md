@@ -1,59 +1,258 @@
 # WatchParty 🎬
 
-WatchParty brings friends together for a movie night, wherever they are.
+WatchParty is a real-time synchronized movie-watching web application that lets people create rooms, invite friends, and enjoy videos together. It combines synchronized playback with live chat, emoji reactions, shared playlists, group polls, and movie discovery in a single responsive interface.
 
-## Current status
+Built with Next.js, TypeScript, Tailwind CSS, and Supabase, WatchParty is designed to make watching together feel simple, interactive, and seamless.
 
-The app supports email-link sign-in, persistent room creation and joining, host transfer, a shared playlist for YouTube and direct MP4/WebM links, shared playback, group polls, local movie discovery and group recommendations, persistent room chat, and transient emoji reactions. Room members can add playlist links; the host can play or remove queued items, create polls, and transfer host privileges to another signed-in room member. YouTube playlist titles are resolved through YouTube's public oEmbed endpoint, with a video-ID fallback when lookup fails. Hosts control playback, and room members receive room, membership, playlist, poll, and playback updates through Supabase Postgres Changes. Playlist entries use the existing `room_playlist_items` table; the room's existing `room_playback.video_id` field stores a YouTube source as `youtube:<video-id>` and direct sources as their URL. Movie discovery uses a small bundled catalogue and never supplies playable links; queueing a catalogue title requires a supported URL.
+## Features
 
-Room creation and joining use the `create_room` and `join_room` database functions in `supabase/schema.sql`. For an existing project, apply the room identity, RLS-helper, and hardening migrations in `supabase/migrations/` before applying `20261015130000_room_chat_reactions.sql`. Apply `20261015140000_room_playlist_host_delete.sql` for host-only playlist removal; review and apply `20261016110000_playlist_delete_realtime_replica_identity.sql` so room-filtered Realtime DELETE events include the room ID. Apply `20261015150000_transfer_room_host.sql` for atomic host transfer, `20261015160000_room_realtime_presence.sql` for private live participant presence, and `20261015170000_room_polls.sql` for host-only poll creation and validated voting; review and apply these migrations separately. For a new project, apply `supabase/schema.sql` and then the chat/reactions, playlist-removal, playlist-delete-realtime, host-transfer, room-presence, and room-polls migrations. The base schema includes the playlist and poll tables in the Realtime publication; confirm the schema has been applied before using these features. The app's room Realtime channels are private, so disable “Allow public access” in Supabase Realtime settings after applying the migrations. The signed-in path is implemented; guests are not supported because guest access requires a signed JWT claim that this app does not issue. Room members remain persistent records; live online status and genre preferences come from ephemeral Supabase Realtime Presence, with preferences saved per room and signed-in user in the current browser. Movie discovery is local catalogue metadata only; no movie is marked playable until a user supplies a supported source URL.
+- **Email Authentication:** Sign in using Supabase email magic links.
+- **Room Creation and Joining:** Create a watch room and invite others to join.
+- **Synchronized Playback:** Keep supported video playback synchronized between room participants.
+- **Host Controls:** Allow the room host to control playback and manage room activities.
+- **Multiple Video Sources:** Support YouTube videos and direct MP4/WebM media URLs.
+- **Shared Playlist:** Maintain a common queue of videos for the room.
+- **Real-Time Chat:** Exchange messages with other participants.
+- **Emoji Reactions:** Send animated reactions that appear over the video area.
+- **Room Presence:** View room participants and their online status.
+- **Host Transfer:** Transfer room-host privileges when supported by the room workflow.
+- **Group Polls:** Create and participate in polls to decide what to watch.
+- **Movie Discovery:** Explore movie recommendations with available descriptions and metadata.
+- **Responsive Interface:** Use the room interface across desktop and mobile screen sizes.
 
-## Playback synchronization baseline
+## Getting Started
 
-Development builds expose a **Playback measurement** panel in the room. Open browser developer tools and filter the Console for `[WatchParty playback metric]`. No metrics are sent to Supabase or saved. Each control action is correlated by `roomId:state_version`; host logs include the action timestamp and the database-write round trip, while receiving clients log the Realtime receipt time and Supabase commit timestamp. Native YouTube seeks are detected by a 500 ms polling loop, so their recorded action time is the detection time and can trail the user's seek by up to one poll interval.
+### Prerequisites
 
-Propagation latency and expected-position drift are calculated only after you check the panel's clock-comparability box. Before checking it, synchronize every test device's operating-system clock and verify the host/receiver clocks differ by no more than 50 ms. If that condition is unknown, leave the box unchecked; event timestamps and server commit time are still logged, but no cross-client latency or drift number is reported. Host database-write round trip is a same-client monotonic-clock measurement and does not depend on device clock synchronization.
+Make sure the following are installed:
 
-### Reproducible procedure
+- Node.js and npm
+- Git
+- A Supabase account and project
 
-1. Start the app with `npm run dev`, sign in on one host browser and one or more viewer browsers, and open the same room. Use the same supported media source on every client. Keep the clients on the same local network and record browser, OS, media type, and Supabase region with the results.
-2. For a two-client baseline, enable clock comparison on the viewer after verifying the clocks. Warm up playback, then perform at least 100 play, 100 pause, and 100 seek actions. For each viewer, collect `realtime-action-received` records with a numeric `propagationLatencyMs`; calculate sample count, median, nearest-rank p95, and maximum separately for each action type. Exclude warm-up actions and any action with an omitted latency.
-3. For the ten-user target, repeat with one host and nine viewers connected concurrently. Report each viewer separately as well as the combined sample distribution; do not count a host database-write round trip as propagation latency.
-4. For correction, inspect `direct-drift-correction-started` / `direct-correction-result` for direct video, or `youtube-drift-correction-started` / `youtube-correction-result` for YouTube. Use only records with numeric before/after drift and compare the after-correction values against 500 ms. The 500 ms result sample is a single observation 500 ms after the seek request, not proof of a hard real-time bound.
-5. For late join, start playback, open the room on a new signed-in viewer, and record the `playback-snapshot` with `source: initial-room-load`, the ensuing player-apply result, and the viewer's first measured drift. For reconnect, disconnect a viewer's network briefly, restore it, then record `source: realtime-reconnect`, the next received action, and drift after correction. Repeat each scenario at least 20 times and include failures/timeouts in the report.
+### Installation
 
-### Results (not yet measured)
+Clone the repository:
 
-| Scenario | Samples | Median latency | p95 latency | Maximum latency | Drift after correction |
-|---|---:|---:|---:|---:|---:|
-| Two clients, play / pause / seek | 0 | UNVERIFIED | UNVERIFIED | UNVERIFIED | UNVERIFIED |
-| Ten concurrent clients, play / pause / seek | 0 | UNVERIFIED | UNVERIFIED | UNVERIFIED | UNVERIFIED |
-| Late join and reconnect | 0 | UNVERIFIED | UNVERIFIED | UNVERIFIED | UNVERIFIED |
+```bash
+git clone https://github.com/HetarthsinhJadeja/watchparty.git
+cd watchparty
+```
 
-The target of p95 propagation at or below 250 ms and drift at or below 500 ms after correction remains unverified until these runs are recorded. The full test suite runs with `npm test`; playback-only calculation tests run with `npm run test:playback`. Both require Node.js 22.6 or later for native TypeScript test-file support.
-
-These measurements include the network path to the configured Supabase Realtime service and back. Running the Next.js development server locally does not make the playback transport local-only.
-
-## Tech stack
-
-- Next.js App Router
-- React and TypeScript
-- Tailwind CSS
-- Supabase JavaScript client and Realtime
-
-## Run locally
-
-Install Node.js and npm, then run:
+Install dependencies:
 
 ```bash
 npm install
+```
+
+### Environment Configuration
+
+Create a `.env.local` file in the project root and configure the Supabase environment variables required by the application.
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your_supabase_publishable_key
+```
+
+Obtain these values from your Supabase project's API settings. Use the project's publishable key, not its secret or service-role key.
+
+Keep `.env.local` out of source control. Never commit real credentials or secret keys to GitHub.
+
+### Run the Development Server
+
+Start the application:
+
+```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in `.env.local`. Enable email sign-in in Supabase Auth and allow the exact local and production callback URLs (`/auth/callback`) in the Auth URL Configuration. Signed-in sessions use Supabase SSR cookies; `proxy.ts` refreshes them and verifies claims before allowing access to `/` or `/room/*`. Never expose a service-role or secret key in browser code.
+The development server supports hot reloading while you edit the application.
 
-## Security
+## Authentication and Room Flows
 
-Keep `.env.local` and all credentials out of Git. The room RPCs validate the authenticated user ID against the signed-in JWT before creating or joining a room.
+WatchParty uses Supabase authentication with email magic links.
+
+The general sign-in flow is:
+
+1. Open the sign-in page.
+2. Enter an email address and request a magic link.
+3. Open the authentication email.
+4. Follow the link to return to WatchParty.
+5. Complete the authentication callback and access the authenticated application.
+
+The application includes an authentication callback route and cookie-backed session handling.
+
+After signing in, users can create or join rooms and access the available room features according to their permissions.
+
+For production deployments, configure the Supabase Site URL and allowed Redirect URLs to match the deployed application's domain and authentication callback route.
+
+## Watch Room and Real-Time Synchronization
+
+The watch room brings video playback and group interaction together in a shared interface.
+
+### Video Playback
+
+Supported video sources include YouTube videos and direct MP4/WebM media URLs. Playback controls allow the host to manage supported playback actions, while synchronization logic communicates playback state to room participants.
+
+The application includes playback-state handling and measurement utilities to help evaluate synchronization performance.
+
+### Shared Playlist
+
+Room participants can interact with the shared playlist according to the permissions implemented by the application. Playlist changes are handled through the room's database and real-time update mechanisms.
+
+### Chat and Emoji Reactions
+
+The chat panel supports real-time room communication. Emoji reactions provide a lightweight way to react during playback, with animated effects that appear over the player.
+
+### Room Members and Host Transfer
+
+Room presence helps participants see who is currently in the room. Host-transfer functionality supports handing control to another participant through the application's room workflow.
+
+### Group Polls
+
+Polls allow room participants to vote on group decisions, such as choosing what to watch next. Poll operations use the room's existing data and permission mechanisms.
+
+### Movie Discovery
+
+The discovery section presents available movie recommendations and associated metadata. It is separate from the playable-video input and shared playlist.
+
+## Database and Security
+
+Supabase provides the application's backend services, including authentication, database storage, row-level security, and real-time updates.
+
+The project contains SQL migrations for room-related functionality and security policies.
+
+Important implementation areas include:
+
+- **Row-Level Security (RLS):** Controls access to room data and related records.
+- **Database Functions and RPCs:** Support room operations and permission checks.
+- **Realtime Subscriptions:** Deliver supported database changes to connected clients.
+- **Authentication Sessions:** Maintain authenticated user sessions through the application's Supabase integration.
+
+Apply and verify the project's required migrations in Supabase before running the application against a new database.
+
+Never expose Supabase secret or service-role keys in browser code or variables prefixed with `NEXT_PUBLIC_`. Client-accessible operations must rely on appropriate database permissions and security policies.
+
+## Testing
+
+Run the checks supported by the project:
+
+```bash
+npm run lint
+npx tsc --noEmit
+npm test
+npm run build
+```
+
+The project also includes playback-related tests. Check `package.json` for the exact playback test command configured in the current version.
+
+These checks help validate code quality, TypeScript correctness, application logic, and production compilation. They do not replace testing the application with multiple authenticated users.
+
+## Deployment on Vercel
+
+WatchParty can be deployed using Vercel's Next.js hosting platform.
+
+### Deployment Steps
+
+1. Push the project to GitHub.
+2. Open [Vercel](https://vercel.com/).
+3. Import the `watchparty` repository.
+4. Keep the framework preset set to Next.js.
+5. Add the required environment variables in the Vercel project settings.
+6. Deploy the application.
+7. Configure Supabase authentication URLs for the production domain.
+8. Test authentication, room creation, playback, and real-time features on the deployed website.
+
+### Supabase Redirect Configuration
+
+In the Supabase dashboard, open **Authentication → URL Configuration**.
+
+Set the Site URL to the production website's origin and add the authentication callback URL to the allowed Redirect URLs.
+
+For local development, retain:
+
+```text
+http://localhost:3000/auth/callback
+```
+
+For production, replace the example domain with the actual deployed domain:
+
+```text
+https://your-production-domain/auth/callback
+```
+
+Use the exact production URL assigned to your deployment. Preview deployments may require additional allowed redirect URLs if you intend to test authentication on them.
+
+### Production Verification
+
+After deployment, verify:
+
+- Email magic-link authentication and callback handling.
+- Room creation and joining.
+- Host-controlled playback synchronization.
+- Shared playlist updates.
+- Chat and emoji reactions.
+- Member presence and host transfer.
+- Poll creation and voting.
+- Responsive behavior on desktop and mobile.
+
+A successful production build confirms compilation, but live multi-user synchronization and authentication should be tested separately.
+
+## Project Structure
+
+The repository is organized around the Next.js App Router and supporting application modules.
+
+```text
+watchparty/
+├── app/
+│   ├── api/                  # API route handlers
+│   ├── auth/                 # Authentication and callback routes
+│   ├── room/
+│   │   └── [roomId]/         # Watch room and feature components
+│   ├── globals.css           # Global styles
+│   ├── layout.tsx            # Root application layout
+│   └── page.tsx              # Main authenticated page
+├── lib/
+│   ├── supabase.ts           # Browser Supabase client
+│   ├── supabase-server.ts    # Server-side Supabase utilities
+│   ├── auth-redirect.mts     # Authentication redirect utilities
+│   ├── movie-catalogue.ts    # Movie discovery data
+│   ├── room-media.ts         # Media-related utilities
+│   └── playback-metrics.mts  # Playback measurements
+├── public/
+│   └── images/               # Public image assets
+├── supabase/                 # Database migrations and SQL
+├── tests/                    # Automated tests
+├── proxy.ts                  # Request/session handling
+├── package.json
+├── package-lock.json
+└── README.md
+```
+
+The tree highlights the main project areas; individual files and feature modules may change as development continues.
+
+## Future Improvements
+
+Potential areas for further development include:
+
+- More extensive multi-user synchronization testing.
+- Improved playback drift handling and latency measurements.
+- Additional room customization options.
+- Expanded movie discovery and recommendation capabilities.
+- Further accessibility and mobile usability improvements.
+
+## Learn More
+
+Explore the official documentation for the technologies used in WatchParty:
+
+- [Next.js Documentation](https://nextjs.org/docs)
+- [Supabase Documentation](https://supabase.com/docs)
+- [Supabase Authentication](https://supabase.com/docs/guides/auth)
+- [Supabase Realtime](https://supabase.com/docs/guides/realtime)
+- [Vercel Documentation](https://vercel.com/docs)
+
+---
+
+WatchParty — a shared screen for movie nights with friends.
