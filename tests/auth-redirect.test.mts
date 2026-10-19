@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { safeRedirectPath } from "../lib/auth-redirect.mts";
+import { safeRedirectPath } from "../lib/auth-redirect.ts";
 
 test("keeps a local room return destination and its query string", () => {
   assert.equal(

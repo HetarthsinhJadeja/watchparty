@@ -8,7 +8,7 @@ import {
   isMatchingAppliedTransportState,
   logPlaybackMetric,
   measurePlaybackDriftMs,
-} from "@/lib/playback-metrics.mts";
+} from "@/lib/playback-metrics.ts";
 
 type PlayerEvent = { target: YouTubePlayer };
 type StateEvent = PlayerEvent & { data: number };

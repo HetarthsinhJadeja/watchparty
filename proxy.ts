@@ -1,12 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { safeRedirectPath } from "@/lib/auth-redirect.mts";
+import { safeRedirectPath } from "@/lib/auth-redirect.ts";
 
 export async function proxy(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabasePublishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-  const isProtectedPath =
-    request.nextUrl.pathname === "/" || request.nextUrl.pathname.startsWith("/room/");
+  const isProtectedPath = request.nextUrl.pathname.startsWith("/room/");
 
   if (!supabaseUrl || !supabasePublishableKey) {
     if (isProtectedPath) {
@@ -37,12 +36,12 @@ export async function proxy(request: NextRequest) {
   const { data, error } = await supabase.auth.getClaims();
   const hasVerifiedUser = !error && typeof data?.claims?.sub === "string";
   if (isProtectedPath && !hasVerifiedUser) {
-    const loginUrl = new URL("/auth", request.url);
-    loginUrl.searchParams.set(
+    const homeUrl = new URL("/", request.url);
+    homeUrl.searchParams.set(
       "next",
       safeRedirectPath(`${request.nextUrl.pathname}${request.nextUrl.search}`),
     );
-    const redirectResponse = NextResponse.redirect(loginUrl);
+    const redirectResponse = NextResponse.redirect(homeUrl);
     for (const cookie of response.cookies.getAll()) {
       redirectResponse.cookies.set(cookie);
     }

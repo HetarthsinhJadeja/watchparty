@@ -10,7 +10,7 @@ import {
   isMatchingAppliedTransportState,
   measurePlaybackDriftMs,
   summarizeMeasurements,
-} from "../lib/playback-metrics.mts";
+} from "../lib/playback-metrics.ts";
 
 test("playback changes distinguish controls from media changes", () => {
   const current = { is_playing: false, position_ms: 1000, video_id: "video-a" };

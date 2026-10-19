@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyPlaylistDelete } from "../lib/playlist-state.mts";
+import { applyPlaylistDelete } from "../lib/playlist-state.ts";
 
 const items = [
   { id: "item-a", room_id: "room-a", title: "First" },

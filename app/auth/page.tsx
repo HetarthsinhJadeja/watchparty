@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import Image from "next/image";
 import { redirect } from "next/navigation";
-import { safeRedirectPath } from "@/lib/auth-redirect.mts";
+import { safeRedirectPath } from "@/lib/auth-redirect.ts";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import AuthForm from "./auth-form";
 

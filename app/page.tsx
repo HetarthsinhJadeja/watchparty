@@ -6,6 +6,12 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { safeRedirectPath } from "@/lib/auth-redirect.ts";
+import {
+  createRoomIdentityArguments,
+  ensureUserSession,
+  joinRoomIdentityArguments,
+} from "@/lib/guest-session.ts";
 
 type Room = {
   id: string;
@@ -45,7 +51,7 @@ function explainRoomError(error: { code?: string; message?: string }) {
     return "We couldn't find that room code. Check it and try again.";
   }
   if (message.includes("identity does not match") || message.includes("verified user")) {
-    return "Your sign-in could not be verified. Sign out, sign in again, and retry.";
+    return "Your session could not be verified. Refresh the page to restore your guest session, then retry.";
   }
   if (error.code === "42501" || message.includes("permission denied") || message.includes("row-level security")) {
     return "Supabase denied this action. Check the room access policies and your sign-in status.";
@@ -82,7 +88,8 @@ export default function Home() {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(false);
-  const [accountMessage, setAccountMessage] = useState("");
+  const [sessionMessage, setSessionMessage] = useState("");
+  const [sessionRetry, setSessionRetry] = useState(0);
   const [roomLoading, setRoomLoading] = useState<"create" | "join" | null>(null);
   const [roomMessage, setRoomMessage] = useState("");
   const [joinCode, setJoinCode] = useState("");
@@ -90,46 +97,53 @@ export default function Home() {
 
   useEffect(() => {
     let active = true;
+    async function initializeSession() {
+      setAuthReady(false);
+      setSessionMessage("");
+      try {
+        const nextSession = await ensureUserSession(supabase.auth);
+        if (!active) return;
+        setSession(nextSession);
+        setAuthReady(true);
+        const nextPath = safeRedirectPath(new URLSearchParams(window.location.search).get("next"));
+        if (nextPath !== "/") router.replace(nextPath);
+      } catch {
+        if (!active) return;
+        setSession(null);
+        setAuthReady(true);
+        setSessionMessage("We couldn't start your guest session. Check your connection and try again.");
+      }
+    }
+
     const { data: authListener } = supabase.auth.onAuthStateChange((event, nextSession) => {
-      if (active) setSession(nextSession);
-      if (active && event === "SIGNED_OUT") router.replace("/auth");
+      if (!active) return;
+      if (nextSession) {
+        setSession(nextSession);
+        setAuthReady(true);
+        setSessionMessage("");
+      }
+      if (event === "SIGNED_OUT") {
+        setSession(null);
+        setAuthReady(false);
+        // Let Supabase finish the sign-out callback before asking it to sign in again.
+        window.setTimeout(() => {
+          if (active) void initializeSession();
+        }, 0);
+      }
     });
 
-    void supabase.auth.getSession().then(({ data, error }) => {
-      if (!active) return;
-      setSession(data.session);
-      setAuthReady(true);
-      if (error) setAccountMessage("We couldn't check your sign-in. Refresh and try again.");
-    }).catch(() => {
-      if (!active) return;
-      setAuthReady(true);
-      setAccountMessage("We couldn't check your sign-in. Refresh and try again.");
-    });
+    void initializeSession();
 
     return () => {
       active = false;
       authListener.subscription.unsubscribe();
     };
-  }, [router]);
-
-  async function signOut() {
-    setAccountMessage("");
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        setAccountMessage("Couldn't sign out. Please try again.");
-        return;
-      }
-      router.replace("/auth");
-    } catch {
-      setAccountMessage("Couldn't sign out. Please try again.");
-    }
-  }
+  }, [router, sessionRetry]);
 
   async function createRoom() {
     setRoomMessage("");
     if (!session?.user.id) {
-      setRoomMessage("Sign in with your email before creating a room.");
+      setRoomMessage("Your guest session is not ready yet. Please try again in a moment.");
       return;
     }
 
@@ -139,8 +153,7 @@ export default function Home() {
         const { data, error } = await supabase.rpc("create_room", {
           p_code: makeRoomCode(),
           p_display_name: "Movie fan",
-          p_created_by_user_id: session.user.id,
-          p_created_by_guest_id: null,
+          ...createRoomIdentityArguments(session.user.id),
           p_metadata: {},
         });
 
@@ -177,7 +190,7 @@ export default function Home() {
 
     setJoinCode(cleanedCode);
     if (!session?.user.id) {
-      setJoinMessage("Sign in with your email before joining a room.");
+      setJoinMessage("Your guest session is not ready yet. Please try again in a moment.");
       return;
     }
 
@@ -187,8 +200,7 @@ export default function Home() {
       const { data, error } = await supabase.rpc("join_room", {
         p_code: cleanedCode,
         p_display_name: "Movie fan",
-        p_user_id: session.user.id,
-        p_guest_id: null,
+        ...joinRoomIdentityArguments(session.user.id),
       });
 
       if (error) {
@@ -273,13 +285,13 @@ export default function Home() {
             <p className="text-xs font-semibold uppercase tracking-[.2em] text-[var(--accent-text)]">Make it a movie night</p>
             <h2 className="mt-4 text-3xl font-semibold tracking-[-.04em] sm:text-4xl">Your couch is wherever you are.</h2>
             <p className="mt-4 text-sm leading-6 text-[#999a9d]">Create a room or enter a code from a friend to start watching together.</p>
-            <div className="mt-6 rounded-2xl border border-white/10 bg-[var(--surface-raised)] p-5" aria-live="polite">
-              <p className="text-sm text-[#c6c7c6]">{authReady ? <>Signed in as <span className="text-white">{session?.user.email ?? "your WatchParty account"}</span></> : "Checking your WatchParty account…"}</p>
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                <p className="text-xs leading-5 text-[#a7a9aa]">Your room membership controls what you can access in each room.</p>
-                <button type="button" onClick={signOut} disabled={!authReady} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-[#c6c7c6] transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-focus)]">Sign out</button>
+            <div className="mt-6 rounded-2xl border border-white/10 bg-[var(--surface-raised)] p-4" aria-live="polite">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-[#c6c7c6]">{!authReady ? "Preparing your guest session…" : session ? "Ready to start a movie night." : "Guest access is temporarily unavailable."}</p>
+                {authReady && !session && <button type="button" onClick={() => setSessionRetry((attempt) => attempt + 1)} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-[#c6c7c6] transition hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-focus)]">Try again</button>}
               </div>
-              {accountMessage && <p className="mt-3 text-xs text-[var(--danger)]" role="alert">{accountMessage}</p>}
+              <p className="mt-2 text-xs leading-5 text-[#a7a9aa]">Room membership still controls what you can access.</p>
+              {sessionMessage && <p className="mt-2 text-xs leading-5 text-[var(--danger)]" role="alert">{sessionMessage}</p>}
             </div>
             {roomMessage && <p className="mt-3 text-sm leading-5 text-[var(--danger)]" role="alert">{roomMessage}</p>}
           </div>
@@ -288,7 +300,7 @@ export default function Home() {
               <div className="flex items-center justify-between"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[var(--accent)]/10 text-[var(--accent-text)]" aria-hidden="true">✳</span><span className="text-xs text-[#6f7277]">01 / HOST</span></div>
               <h3 className="mt-6 text-xl font-semibold">Create a room</h3>
               <p className="mt-2 min-h-12 text-sm leading-6 text-[#999a9d]">Create a room with a shareable code that stays saved in Supabase.</p>
-              <button type="button" onClick={createRoom} disabled={roomLoading !== null || !authReady} aria-busy={roomLoading === "create"} className="mt-6 w-full rounded-xl bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-[var(--accent-foreground)] transition hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">{roomLoading === "create" ? "Creating room…" : "Create room"}</button>
+              <button type="button" onClick={createRoom} disabled={roomLoading !== null || !authReady || !session} aria-busy={roomLoading === "create"} className="mt-6 w-full rounded-xl bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-[var(--accent-foreground)] transition hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">{roomLoading === "create" ? "Creating room…" : "Create room"}</button>
               <p className="mt-4 min-h-5 text-xs leading-5 text-[#a7a9aa]" aria-live="polite">{roomLoading === "create" ? "Saving your room…" : roomMessage}</p>
             </article>
 
@@ -299,7 +311,7 @@ export default function Home() {
               <form onSubmit={joinRoom} className="mt-6">
                 <label htmlFor="room-code" className="mb-2 block text-xs font-medium text-[#c4c5c6]">Room code</label>
                 <input id="room-code" name="roomCode" type="text" autoComplete="off" value={joinCode} onChange={(event) => { setJoinCode(event.target.value); setJoinMessage(""); }} placeholder="e.g. NOVA-MOON" className="w-full rounded-xl border border-white/15 bg-[var(--surface-low)] px-4 py-3 text-sm uppercase tracking-[.08em] text-white outline-none transition placeholder:normal-case placeholder:tracking-normal placeholder:text-[#64676d] focus:border-[var(--accent-focus)]/70 focus:ring-2 focus:ring-[var(--accent-focus)]/20" aria-describedby="join-feedback" />
-                <button type="submit" disabled={roomLoading !== null || !authReady} aria-busy={roomLoading === "join"} className="mt-3 w-full rounded-xl border border-white/15 px-4 py-3 text-sm font-semibold text-white transition hover:border-white/30 hover:bg-white/[.04] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-focus)]">{roomLoading === "join" ? "Joining room…" : <>Join room <span aria-hidden="true">→</span></>}</button>
+                <button type="submit" disabled={roomLoading !== null || !authReady || !session} aria-busy={roomLoading === "join"} className="mt-3 w-full rounded-xl border border-white/15 px-4 py-3 text-sm font-semibold text-white transition hover:border-white/30 hover:bg-white/[.04] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-focus)]">{roomLoading === "join" ? "Joining room…" : <>Join room <span aria-hidden="true">→</span></>}</button>
                 <p id="join-feedback" className="mt-3 min-h-5 text-xs leading-5 text-[#a7a9aa]" aria-live="polite">{roomLoading === "join" ? "Checking the room code…" : joinMessage || "Room codes are checked against Supabase."}</p>
               </form>
             </article>

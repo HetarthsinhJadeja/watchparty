@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
-import { safeRedirectPath } from "@/lib/auth-redirect.mts";
+import { safeRedirectPath } from "@/lib/auth-redirect.ts";
 
 function authErrorRedirect(request: NextRequest, nextPath: string, reason: "expired" | "configuration") {
   const destination = new URL("/auth", request.url);

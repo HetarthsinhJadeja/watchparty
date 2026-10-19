@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { parseRoomMediaUrl, parseStoredRoomMedia, resolveStoredRoomMedia, youtubeTitleFallback } from "@/lib/room-media";
-import { applyPlaylistDelete } from "@/lib/playlist-state.mts";
+import { applyPlaylistDelete } from "@/lib/playlist-state.ts";
 import { MOVIES, sanitizeGenrePreferences, type Movie } from "@/lib/movie-catalogue";
 import {
   classifyPlaybackAction,
@@ -17,7 +17,7 @@ import {
   logPlaybackMetric,
   measurePlaybackDriftMs,
   type PlaybackAction,
-} from "@/lib/playback-metrics.mts";
+} from "@/lib/playback-metrics.ts";
 import { supabase } from "@/lib/supabase";
 import RoomChat from "./room-chat";
 import RoomMembersPanel, { type RoomMember } from "./room-members-panel";
@@ -108,7 +108,7 @@ function describePollError(error: { code?: string; message?: string }, action: "
   if (error.code === "42501" || /row-level security|permission denied/i.test(message)) {
     return action === "create"
       ? "Poll creation was denied. Confirm you are the current host and review the room polls migration."
-      : "This poll action was denied. Confirm you are signed in and still a room member.";
+      : "This poll action was denied. Confirm your guest session is active and you are still a room member.";
   }
   if (error.code === "PGRST202" && action === "create") return "Poll creation is not set up yet. Review and apply the room polls migration.";
   if (error.code === "42P01") return "Poll tables are missing. Apply the project schema before using polls.";
@@ -203,14 +203,14 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       setPresenceStatus("unavailable");
       setOnlineUserIds(new Set());
       setGroupGenrePreferences({});
-      setConnectionMessage("Signed out");
-      setErrorMessage("Your session ended. Sign in again to continue in this room.");
+      setConnectionMessage("Starting a new guest session");
+      setErrorMessage("Your guest session ended. Return to the home page to continue.");
       setIsReady(false);
       const channel = roomChannelRef.current;
       roomChannelRef.current = null;
       if (channel) void supabase.removeChannel(channel);
       const nextPath = `/room/${encodeURIComponent(roomId)}`;
-      router.replace(`/auth?next=${encodeURIComponent(nextPath)}`);
+      router.replace(`/?next=${encodeURIComponent(nextPath)}`);
     });
     return () => authListener.subscription.unsubscribe();
   }, [roomId, router]);
@@ -507,8 +507,9 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       if (!active) return;
       if (sessionError || !sessionData.session?.user.id) {
-        setErrorMessage("Sign in from the home page, then join this room again.");
-        setConnectionMessage("Sign-in required");
+        setErrorMessage("Your guest session is not available. Return to the home page to start a new session.");
+        setConnectionMessage("Guest session required");
+        router.replace("/");
         return;
       }
       setCurrentUserId(sessionData.session.user.id);
@@ -783,7 +784,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
         });
       }
     };
-  }, [refreshPlaylist, refreshPolls, refreshRoomMembers, roomId, updatePlaybackState]);
+  }, [refreshPlaylist, refreshPolls, refreshRoomMembers, roomId, router, updatePlaybackState]);
 
   async function createRoomPoll(question: string, options: string[]) {
     if (!isHost || !currentUserId) {
@@ -816,7 +817,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
 
   async function castPollVote(pollId: string, optionId: string) {
     if (!currentUserId) {
-      setPollError("Sign in before voting.");
+      setPollError("Your guest session is not available. Return to the home page and try again.");
       return false;
     }
     if (polls.find((poll) => poll.id === pollId)?.currentUserOptionId) {
